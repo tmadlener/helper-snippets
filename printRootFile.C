@@ -1,5 +1,5 @@
-// define macro to switch between c++11 and before
-#define __CPP11_SUP (__cplusplus == 201103L)
+#include "vector_stuff.h"
+#include "string_stuff.h"
 
 #include "TFile.h"
 #include "TObjArray.h"
@@ -15,48 +15,27 @@
 #include <iostream>
 #include <algorithm>
 
-/** get the UNIQUE names of all trees in the file.
- * TTree::AutoSave leads to duplicate trees when looked up like this. ROOT manages this when the tree is obtained
- * via TFile::Get(), however here we have to do it manually. This is done by employing std::unique.
+// compile with: g++ printRootFile.C -o printRootFile $(root-config --libs --cflags)
+// run: ./printRootFile /path/to/the/root/file.root
+
+// TODO: The really nice and more easily maintainable thing for the ouptut would be to define a facet instead of
+// indenting different levels via prepending std::string consisting of whitespace only. However, I can't seem
+// to get my head around facets at the moment and I have not time.
+
+const int indentDifference = 2; /**< difference of indentation in spaces between different "levels". */
+int indentLevel; /**< keep track of the current indentation globally. */
+
+/**
+ * which TTrees have we already printed?
+ * TTree::AutoSave leads to duplicat TTrees when looded up like this. ROOT manages this wenn the tree is obtained
+ * via TFile::Get(), however here we have to do it manually.
  */
-const std::vector<std::string> getTreeNames(TFile* file)
-{
-  std::vector<std::string> names;
-  TIter nextKey( file->GetListOfKeys() );
-#if __CPP11_SUP
-  TKey* key = nullptr;
-#else
-  TKey* key = NULL;
-#endif
-  while ( key = (TKey*) nextKey() ) {
-    TObject* obj = key->ReadObj();
-    if ( obj->IsA()->InheritsFrom(TTree::Class()) ) {
-      names.push_back( std::string( ((TTree*) obj)->GetName() ) );
-    }
-  }
+std::vector<std::string> printedTTrees;
 
-  std::sort(names.begin(), names.end());
-  std::vector<std::string>::iterator nEnd = std::unique(names.begin(), names.end()); // no auto key-word pre c++11
-  names.resize(std::distance(names.begin(), nEnd));
-  return names;
-}
+/** keep track of the current "working" directory. */
+std::string currentDir;
 
-const std::vector<TTree*> getTreePointers(TFile* file)
-{
-  std::vector<TTree*> trees;
-#if __CPP11_SUP
-  for (const auto& name : getTreeNames(file)) {
-#else
-  const std::vector<std::string> treeNames = getTreeNames(file);
-  for (size_t i = 0; i < treeNames.size(); ++i) {
-    const std::string& name = treeNames[i];
-#endif
-    trees.push_back( (TTree*) file->Get(name.c_str()) );
-  }
-
-  return trees;
-}
-
+/** Get all the branches stored in the TTree via TTree::GetListOfBranches(). */
 const std::vector<std::string> getBranchNames(TTree* tree)
 {
   std::vector<std::string> names;
@@ -67,25 +46,58 @@ const std::vector<std::string> getBranchNames(TTree* tree)
   return names;
 }
 
+/** print one TTree. */
+void printTTree(TTree* tree)
+{
+  std::cout << std::string(indentLevel, ' ') << tree->GetName() << "/" << std::endl;
+  indentLevel += indentDifference;
+  for (const auto& name : getBranchNames(tree)) {
+    std::cout << std::string(indentLevel, ' ') << name << std::endl;
+  }
+  indentLevel -= indentDifference;
+}
+
+/** print recursively by going through all TDirectories that are in the file and contain a TTree. */
+template<typename T>
+void printRecursively(const T* fileOrDir)
+{
+  TIter nextKey( fileOrDir->GetListOfKeys() );
+  TKey* key = nullptr;
+  while (key = static_cast<TKey*>( nextKey() )) {
+    TObject* obj = key->ReadObj();
+    if ( obj->IsA()->InheritsFrom(TTree::Class()) ) {
+      std::string treeName = static_cast<TTree*>(obj)->GetName();
+      treeName = currentDir + "/" + treeName;
+      // if the TTrees has already been printed. Skip it
+      if (std::find(printedTTrees.begin(), printedTTrees.end(), treeName) != printedTTrees.end()) continue;
+
+      printTTree(static_cast<TTree*>(obj));
+      printedTTrees.push_back(treeName);
+    } else if ( obj->IsA()->InheritsFrom(TDirectory::Class()) ) {
+      std::string dirName = static_cast<TDirectory*>(obj)->GetName();
+      std::cout << std::string(indentLevel, ' ') << dirName << "/" << std::endl;
+      currentDir += "/" + dirName;
+
+      indentLevel += indentDifference;
+      printRecursively(static_cast<TDirectory*>(obj));
+      indentLevel -= indentDifference;
+
+      // now we move to the next directory, so we have to remove the last part of the path again
+      currentDir = removeAfterLast(currentDir, "/");
+    }
+  }
+}
+
 /** "main" function. */
 void printRootFile(const std::string& filename)
 {
+  indentLevel = 0;
+  printedTTrees = std::vector<std::string>{};
+  currentDir = "";
+
   TFile* file = TFile::Open(filename.c_str());
-#if __CPP11_SUP
-  for (const auto tree : getTreePointers(file)) {
-    std::cout << "TTree: " << tree->GetName() << std::endl;
-    for (const auto& name : getBranchNames(tree)) {
-#else
-  std::vector<TTree*> trees = getTreePointers(file);
-  for (size_t iTree = 0; iTree < trees.size(); ++iTree) {
-    std::cout << "TTree: " << trees[iTree]->GetName() << std::endl;
-    const std::vector<std::string> branchNames = getBranchNames(trees[iTree]);
-    for (size_t iBranch = 0; iBranch < branchNames.size(); ++iBranch) {
-      const std::string& name = branchNames[iBranch];
-#endif
-      std::cout << name << std::endl;
-    }
-  }
+  std::cout << "contents of file \'" << filename << "\':" << std::endl;
+  printRecursively(file);
 }
 
 #ifndef __CINT__
