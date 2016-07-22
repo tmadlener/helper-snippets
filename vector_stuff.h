@@ -1,3 +1,7 @@
+/////////////////////////////////////////////////////////////
+// some (rather generic) stuff to work easily with vectors //
+/////////////////////////////////////////////////////////////
+
 #include <vector>
 #include <iostream>
 #include <utility>
@@ -15,7 +19,14 @@ std::ostream& operator<<(std::ostream& os, const std::vector<T>& v)
     return os;
   }
   os << "[";
-  for(auto it = v.cbegin(); it != v.cend() -1; ++it) { os << *it << ", "; }
+#if __cplusplus <= 199711L
+  typedef typename std::vector<T>::const_iterator vecIt;
+  vecIt it = v.begin();
+#else
+  auto it = v.cbegin();
+#endif
+  for(; it != v.end() -1; ++it) { os << *it << ", "; }
+
   os << v.back();
   os << "]";
   return os;
@@ -30,13 +41,21 @@ std::ostream& operator<<(std::ostream& os, const std::vector<std::pair<A,B> >& v
     return os;
   }
   os << "[";
-  for(auto itp = v.cbegin(); itp != v.cend() - 1; ++itp) {
+#if __cplusplus <= 199711L
+  typedef typename std::vector<std::pair<A,B> > vecPaIt;
+  vecPaIt itp = v.begin();
+#else
+  auto itp = v.cebgin();
+#endif
+  for(; itp != v.end() - 1; ++itp) {
     os << "(" << itp->first << ", " << itp->second << "), ";
   }
   os << "(" << v.back().first << ", " << v.back().second << ")";
   os << "]";
   return os;
 }
+
+#if __cplusplus > 199711L // almost any of the following will only work with c++11
 
 /** calculuate the average value of all values stored in the vector */
 template<class T>
@@ -81,5 +100,6 @@ bool any(const std::vector<bool>& v) {
   }
   return false;
 }
+#endif // c++11 support needed
 
 #endif
