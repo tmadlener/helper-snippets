@@ -1,4 +1,3 @@
-#include "vector_stuff.h"
 #include "string_stuff.h"
 
 #include "TFile.h"
@@ -20,17 +19,18 @@
 
 // TODO: The really nice and more easily maintainable thing for the ouptut would be to define a facet instead of
 // indenting different levels via prepending std::string consisting of whitespace only. However, I can't seem
-// to get my head around facets at the moment and I have not time.
+// to get my head around facets at the moment and I have no time.
 
 const int indentDifference = 2; /**< difference of indentation in spaces between different "levels". */
 int indentLevel; /**< keep track of the current indentation globally. */
 
 /**
- * which TTrees have we already printed?
- * TTree::AutoSave leads to duplicat TTrees when looded up like this. ROOT manages this wenn the tree is obtained
+ * which TObjects have we already printed?
+ * TTree::AutoSave leads to duplicate TTrees when looded up like this. ROOT manages this wenn the tree is obtained
  * via TFile::Get(), however here we have to do it manually.
+ * This can also happen for other TObjects.
  */
-std::vector<std::string> printedTTrees;
+std::vector<std::string> printedTObjects;
 
 /** keep track of the current "working" directory. */
 std::string currentDir;
@@ -46,8 +46,16 @@ const std::vector<std::string> getBranchNames(TTree* tree)
   return names;
 }
 
-/** print one TTree. */
-void printTTree(TTree* tree)
+/** templatized print function that does the actual work. */
+template<typename O>
+void print(O* obj)
+{
+  std::cout << std::string(indentLevel, ' ') << obj->GetName() << std::endl;
+}
+
+/** templatized print function that does the actual work. Spezialization needed for TTree to also print TBranches. */
+template<>
+void print(TTree* tree)
 {
   std::cout << std::string(indentLevel, ' ') << tree->GetName() << "/" << std::endl;
   indentLevel += indentDifference;
@@ -57,23 +65,38 @@ void printTTree(TTree* tree)
   indentLevel -= indentDifference;
 }
 
+/**
+ * print any object.
+ * This function checks the class of obj and checks if a special version of print is necessary for that class. If
+ * so, performs a cast and passes on to the function which does the actual printing.
+ */
+void printObject(TObject* obj)
+{
+  std::string objName = obj->GetName();
+  objName = currentDir += "/" + objName;
+  // check if the object has been printed yet and skip if so.
+  if (std::find(printedTObjects.begin(), printedTObjects.end(), objName) != printedTObjects.end()) return;
+
+  if ( obj->IsA()->InheritsFrom(TTree::Class()) ) {
+    print(static_cast<TTree*>(obj));
+  } else {
+    print(obj);
+  }
+
+  printedTObjects.push_back(objName);
+}
+
 /** print recursively by going through all TDirectories that are in the file and contain a TTree. */
 template<typename T>
 void printRecursively(const T* fileOrDir)
 {
-  TIter nextKey( fileOrDir->GetListOfKeys() );
+  TIter nextKey(fileOrDir->GetListOfKeys());
   TKey* key = nullptr;
-  while (key = static_cast<TKey*>( nextKey() )) {
+  while (key = static_cast<TKey*>(nextKey())) {
     TObject* obj = key->ReadObj();
-    if ( obj->IsA()->InheritsFrom(TTree::Class()) ) {
-      std::string treeName = static_cast<TTree*>(obj)->GetName();
-      treeName = currentDir + "/" + treeName;
-      // if the TTrees has already been printed. Skip it
-      if (std::find(printedTTrees.begin(), printedTTrees.end(), treeName) != printedTTrees.end()) continue;
-
-      printTTree(static_cast<TTree*>(obj));
-      printedTTrees.push_back(treeName);
-    } else if ( obj->IsA()->InheritsFrom(TDirectory::Class()) ) {
+    if ( !obj->IsA()->InheritsFrom(TDirectory::Class()) ) {
+      printObject(obj);
+    } else {
       std::string dirName = static_cast<TDirectory*>(obj)->GetName();
       std::cout << std::string(indentLevel, ' ') << dirName << "/" << std::endl;
       currentDir += "/" + dirName;
@@ -92,12 +115,18 @@ void printRecursively(const T* fileOrDir)
 void printRootFile(const std::string& filename)
 {
   indentLevel = 0;
-  printedTTrees = std::vector<std::string>{};
+  printedTObjects = std::vector<std::string>{};
   currentDir = "";
 
   TFile* file = TFile::Open(filename.c_str());
+  if (!file) {
+    std::cerr << "Cannot open file \'" << filename << "\'" << std::endl;
+    exit(1);
+  }
   std::cout << "contents of file \'" << filename << "\':" << std::endl;
   printRecursively(file);
+
+  file->Close();
 }
 
 #ifndef __CINT__
