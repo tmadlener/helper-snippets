@@ -21,6 +21,19 @@ std::vector<std::string> splitString(const std::string& in, const char delim)
   return tokens;
 }
 
+/** count the number of occurences of substr in str. */
+size_t countStrInStr(const std::string& str, const std::string& substr)
+{
+  size_t cnt{};
+  size_t pos = str.find(substr, 0);
+  while(pos != std::string::npos) {
+    ++cnt;
+    pos = str.find(substr, pos + 1);
+  }
+
+  return cnt;
+}
+
 /** check if string starts with another string. */
 inline bool startsWith(const std::string& input, const std::string& prefix)
 {
@@ -39,7 +52,11 @@ std::string removeLeading(const std::string& str, const std::string& leading = "
 inline std::string removeAfterLast(const std::string& str, const std::string& last)
 {
   const size_t pos = str.find_last_of(last);
-  return str.substr(0,pos);
+  if (pos != std::string::npos) {
+    return str.substr(0,pos);
+  }
+
+  return str;
 }
 
 #endif
