@@ -59,4 +59,30 @@ inline std::string removeAfterLast(const std::string& str, const std::string& la
   return str;
 }
 
+/**
+ * replace all instances of tar in str by rep.
+ * Returns the number of replacements that took place if succesful or -2 if the tar is empty or -1 if str is empty.
+ */
+int replace(std::string& str, const std::string& tar, const std::string& rep)
+{
+  // handle some trivial "error" cases that make no sense in usage
+  if (tar.empty()) return -2;
+  if (str.empty()) return -1;
+
+  const size_t tarlen = tar.length();
+  const size_t replen = rep.length();
+  if (tarlen > str.length()) return 0; // we can't replace something that doesn't even fit
+
+  int repCtr = 0;
+
+  size_t pos = 0;
+    while ((pos = str.find(tar,pos)) != std::string::npos) {
+    str.replace(pos, replen, rep);
+    pos += replen;
+    repCtr++;
+  }
+
+  return repCtr;
+}
+
 #endif
