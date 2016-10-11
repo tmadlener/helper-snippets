@@ -85,4 +85,18 @@ int replace(std::string& str, const std::string& tar, const std::string& rep)
   return repCtr;
 }
 
+/** join the passed elements together with the passed joiner. */
+std::string join(const std::vector<std::string>& elems, const std::string& joiner)
+{
+  if (elems.empty()) return "";
+
+  std::stringstream ret;
+  ret << elems[0];
+  for (size_t i = 1; i < elems.size(); ++i) {
+    ret << joiner << elems[i];
+  }
+
+  return ret.str();
+}
+
 #endif
